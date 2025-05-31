@@ -1,0 +1,54 @@
+# 加载必要的包
+library(readxl)
+library(ggplot2)
+library(dplyr)
+
+# 读取数据
+data <- read_xlsx("data3.xlsx")
+data$group <- factor(data$group, levels = c("400 nN", "0 nN"))
+
+# 设置颜色（点色，线色）
+#point_color <- c("400 nN" = "#ff68ff", "0 nN" = "#26cccc")  #文章颜色
+#line_color <- c("400 nN" = "#8a088a", "0 nN" = "#0a7878") #文章颜色
+
+point_color <- c("400 nN" = "#ff9900", "0 nN" = "#66ccff")
+line_color <- c("400 nN" = "#ff0404", "0 nN" = "#0134cc")
+
+# 计算每组数据的拟合结果
+fit_data <- data %>%
+  group_by(group) %>%
+  do({
+    # 生成平滑曲线
+    fit <- smooth.spline(.$`wavelength`, .$`intensity`, spar = 0.5) # 平滑参数，控制曲线的平滑程度。值越小，拟合的曲线越贴近原始数据；值越大，曲线越平滑。
+    # 预测密集点
+    fit_df <- data.frame(
+      `wavelength` = seq(min(.$`wavelength`), max(.$`wavelength`), length.out = 1000), # 这里生成了 1000 个点（可根据自己的数据量进行调整）
+      `intensity` = predict(fit, seq(min(.$`wavelength`), max(.$`wavelength`), length.out = 1000))$y,
+      group = unique(.$group)
+    )
+    fit_df
+  })
+
+
+# 先创建一个基本的 ggplot 对象
+ggplot(data, aes(x = wavelength, y = intensity, color = group, shape = group)) + 
+  # 先添加 400 nN 组的几何对象
+  geom_point(data = subset(data, group == "400 nN"), color = point_color["400 nN"], size = 0.75, stroke = 0.6) +
+  geom_line(data = subset(fit_data, group == "400 nN"), size = 0.75) +
+  # 再添加 0 nN 组的几何对象
+  geom_point(data = subset(data, group == "0 nN"), color = point_color["0 nN"], size = 0.75, stroke = 0.6) + 
+  geom_line(data = subset(fit_data, group == "0 nN"), size = 0.75) +
+  scale_color_manual(values = line_color) +
+  scale_shape_manual(values = c(21, 21)) +
+  guides(shape = guide_legend(override.aes = list(size = 2, linetype = 1, stroke = 1.2, fill = "white"))) + 
+  scale_y_continuous(limits = c(0, 8.5),
+                     expand = c(0, 0),
+                     breaks = seq(0, 8, 2)) +
+  scale_x_continuous(expand = c(0, 0)) +
+  labs(x = "Wavelength (nm)", y = "Normalized emission intensity") +
+  theme_classic(base_size = 12) + 
+  theme(axis.text = element_text(size = 11, color = "black"),
+        legend.title = element_blank(),
+        legend.position = c(0.2, 0.9))
+
+ggs
