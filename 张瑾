@@ -1,0 +1,59 @@
+# 加载必要的包
+library(tidyverse)
+library(readxl)
+library(rstatix) # 重复测量方差分析
+library(ggpubr)  # 添加显著性标记
+
+# 读入数据
+data  = read_xlsx("data_4.xlsx")
+
+# 宽数据转换成长数据
+data_long <- data %>%
+  pivot_longer(
+    cols = value1:value6,   # 选择需要转换的列(value1到value6)
+    names_to = "subject",   # 新生成的列名(存储原列名)
+    values_to = "GIR"       # 新生成的列名(存储原值)
+  ) %>%
+  filter(!(group == "chABC" & subject == "value6")) %>%   # 移除chABC组的value6(缺失值)
+  mutate(
+    subject = paste0(group, "_", str_remove(subject, "value")),   # 生成唯一的受试者ID(组名+编号)
+    group = factor(group, levels=c("chABC", "Vehicle")),          # 将分组变量转为因子并指定顺序
+    time = factor(time, levels = c(-15, -5, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120)),  # 将时间变量转为因子并指定顺序
+    phase = ifelse(time %in% c(-15, -5, 0), "Basal", "Clamp")     # 创建实验阶段变量(基础期和钳制期)
+  )
+
+# 重复测量方差分析
+res.aov <- anova_test(
+  data = filter(data_long, phase == "Clamp"),  # 仅分析钳制期
+  dv = GIR,         # 因变量：葡萄糖输注率(GIR)
+  wid = subject,    # 受试者ID变量
+  within = time,    # 组内因素：时间
+  between = group   # 组间因素：处理组
+)
+
+anova_results <- get_anova_table(res.aov)  # 从 res.aov 对象中提取ANOVA结果
+print(anova_results)   # 打印结果
+
+# 事后检验(组间比较)
+posthoc <- data_long %>%
+  filter(phase == "Clamp") %>%    # 筛选钳制期数据
+  group_by(time) %>%              # 按时间点分组比较
+  t_test(GIR ~ group) %>%         # 执行t检验
+  #adjust_pvalue(method = "bonferroni") %>%  # 矫正 
+  add_significance()              # 添加显著性标记
+
+print(posthoc)  # 打印 t_test 结果
+
+
+# 可视化
+# 点线+误差线图
+p <- ggplot(data_long, aes(x = time, y = GIR)) +
+  # 添加背景色块标记不同实验阶段
+  annotate("rect", xmin = 0, xmax = "0", ymin = 0, ymax = 40, fill = "#dae2f3") +       # 背景色块，基础期到钳制期的过渡
+  annotate("rect", xmin = "90", xmax = "120", ymin = 0, ymax = 40, fill = "#dae2f3") +  # 背景色块，钳制期末段
+  # 添加阶段标签文本
+  annotate("text", x = "-15", y = 40, label = "Basal", hjust = 0.3, vjust = -0.4, size = 7) +  # 基础期标签
+  annotate("text", x = "90", y = 40, label = "Clamp", hjust = -0.1, vjust = -0.4, size = 7) +  # 钳制期标签
+  # 添加误差线(均值的标准误)
+  stat_summary(aes(group = group), 
+               geom = "errorbar",fun.data = "mean_se", 
