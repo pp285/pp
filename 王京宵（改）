@@ -1,0 +1,65 @@
+# 加载必要的包
+library(ggplot2)
+library(readxl)     # 读取Excel文件
+library(patchwork)  # 组合图形
+
+
+# 读入数据
+data1 <- read_excel("data_3.xlsx", sheet = 1)
+data2 <- read_excel("data_3.xlsx", sheet = 2)
+data3 <- read_excel("data_3.xlsx", sheet = 3)
+
+
+# 转换为长格式的函数
+prepare_data <- function(data) {
+  
+  # 转换为长格式
+  data_long <- data.frame(
+    time = c(data$`Time (s)`, data$`Time (s)`),
+    group = rep(c("SHU9119", "ACSF"), each = nrow(data)),
+    mean = c(data$SHU9119_Mean, data$ACSF_Mean),
+    SEM = c(data$SHU9119_SEM, data$ACSF_SEM)
+  )
+  
+  # 定义展示顺序
+  data_long$group <- factor(data_long$group, levels = c("ACSF", "SHU9119"))
+  
+  return(data_long)
+}
+
+
+# 使用函数准备转数据为长格式
+data1_long <- prepare_data(data1)
+data2_long <- prepare_data(data2)
+data3_long <- prepare_data(data3)
+
+
+# 定义颜色
+my_color <- c("#808080", "#f15a24")
+
+
+# data1 - 图left
+p1 <- ggplot(data1_long, aes(x = time, y = mean, fill = group, color = group)) +
+  # 水平参考线
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.8) +  # 在 y=0 处画虚线
+  # 误差棒
+  geom_errorbar(aes(ymin = mean - SEM, ymax = mean + SEM, width = 0), alpha = 0.2) +  # 误差条上下边界(均值±标准误)
+  # 均值线
+  geom_line(linewidth = 0.7) +  # 线宽
+  # 自定义颜色
+  scale_color_manual(values = my_color) +   # 填充色
+  scale_fill_manual(values = my_color) +    # 线条色
+  # 调整坐标轴：固定坐标范围并设置刻度
+  scale_x_continuous(limits = c(-20, 120), expand = c(0, 0)) +  # X轴范围，不扩展
+  scale_y_continuous(limits = c(-0.05, 0.15),                   # Y轴范围
+                     breaks = seq(-0.05, 0.15, by = 0.05),      # 每0.05个单位显示一个刻度
+                     expand = c(0, 0)) +                        # 坐标轴两端不扩展
+  # 坐标轴名称和标题
+  labs(x = "Time (s)", y = expression(-ΔF/F[0]), title = "Hits: Mouse 1") +  # 带下标的标签
+  # 设置主题
+  theme_classic() +
+  # 添加注释
+  annotate("segment", x = -10, xend = -10, y = -0.04, yend = -0.01,   # 箭头注释
+           arrow = arrow(type = "closed", length = unit(0.3, "cm")), size = 0.6) +
+  annotate("text", x = -9, y = -0.03, label = "cAMP", size = 6, hjust = 0) +  # 文本注释
+  annotate("text", x = 70, y = 0.14, label = "ACSF", size = 6, color = "#808080
